@@ -1,11 +1,14 @@
 package com.mll.controller;
 
 
+import com.mll.dto.UserDTO;
+import com.mll.entity.User;
 import com.mll.entity.UserInfo;
 import com.mll.dto.Result;
 import com.mll.service.IUserInfoService;
 import com.mll.service.IUserService;
 import com.mll.dto.LoginFormDTO;
+import com.mll.utils.UserHolder;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
@@ -56,7 +59,8 @@ public class UserController {
     @GetMapping("/me")
     public Result me(){
         // TODO 获取当前登录的用户并返回
-        return Result.fail("功能未完成");
+        UserDTO user = UserHolder.getUser();
+        return Result.ok(user);
     }
 
     @GetMapping("/info/{id}")

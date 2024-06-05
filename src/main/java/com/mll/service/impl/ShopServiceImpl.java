@@ -6,6 +6,7 @@ import com.mll.dto.Result;
 import com.mll.entity.Shop;
 import com.mll.mapper.ShopMapper;
 import com.mll.service.IShopService;
+import com.mll.utils.BloomFilterHelper;
 import jakarta.annotation.Resource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,7 @@ import cn.hutool.core.util.RandomUtil;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.mll.utils.RedisConstants.*;
 
@@ -23,7 +25,9 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     @Resource
     private StringRedisTemplate stringRedisTemplate;
     @Resource
-    private IShopService shopService;
+    private ShopMapper shopMapper;
+    @Resource
+    private BloomFilterHelper bloomFilterHelper;
     @Override
     public Result queryById(Long id){
 
@@ -36,11 +40,14 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             }
             return Result.ok(JSONUtil.parseObj(shopJson));
         }
+        if (!bloomFilterHelper.mightContain(id)) {
+            return Result.fail("shop is null");
+        }
 
         //redis分布式锁
         String lockKey = LOCK_SHOP_KEY + id;
         try{
-            //尝试获取锁
+            //尝试获取互斥锁
             boolean isLocked = tryLock(lockKey,10);
             //未能获取锁，等待并重试
             if(!isLocked){
@@ -57,7 +64,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
                 return Result.ok(JSONUtil.parseObj(shopJson));
             }
             //若redis中为空，则从数据库中查询
-            Shop shop = shopService.getById(id);
+            Shop shop = shopMapper.selectById(id);
             //若sql中也为空，则缓存空结果：以避免缓存穿透
             if(shop == null){
                 stringRedisTemplate.opsForValue().set(cacheKey,"",5, TimeUnit.MINUTES);
@@ -71,6 +78,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
            Thread.currentThread().interrupt();
            return Result.fail("Failed to acquire lock");
         } finally {
+            //释放锁
             releaseLock(lockKey);
         }
     }
@@ -88,7 +96,20 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     }
 
     @Override
-    public List<Long> getAllShopIds() {
+    public Result getAllShopIds() {
+        try {
+            List<Long> shopIds = shopMapper.selectList(null)
+                    .stream()
+                    .map(Shop::getId)
+                    .collect(Collectors.toList());
+            return Result.ok(shopIds);
+        } catch (Exception e) {
+            return Result.fail("Failed to fetch shop IDs");
+        }
+    }
+
+    @Override
+    public Result queryShopByType(Integer typeId, Integer current, Double x, Double y) {
         return null;
     }
 

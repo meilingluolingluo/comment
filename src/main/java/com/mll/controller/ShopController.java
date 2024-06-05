@@ -1,7 +1,5 @@
 package com.mll.controller;
 
-import cn.hutool.core.util.StrUtil;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mll.dto.Result;
 import com.mll.entity.Shop;
 import com.mll.service.IShopService;
@@ -23,6 +21,21 @@ public class ShopController {
     @GetMapping("/{id}")
     public Result queryShopById(@PathVariable("id") Long id) {
         return Result.ok(shopService.queryById(id));
+    }
+    @GetMapping("/of/type")
+    public Result queryShopByType(
+            @RequestParam("typeId") Integer typeId,
+            @RequestParam(value = "current", defaultValue = "1") Integer current,
+            @RequestParam(value = "x", required = false) Double x,
+            @RequestParam(value = "y", required = false) Double y
+    ) {
+        return shopService.queryShopByType(typeId, current, x, y);
+    }
+
+
+    @GetMapping("/all")
+    public Result queryShopAll(){
+        return Result.ok(shopService.getAllShopIds());
     }
 
     /**
@@ -48,5 +61,7 @@ public class ShopController {
         // 写入数据库
         return shopService.update(shop);
     }
+
+
 
 }

@@ -31,3 +31,8 @@ logging:
     com.mll: debug
   pattern:
     dateformat: mm:ss.SSS
+
+worker:
+  id: 1
+datacenter:
+  id: 1

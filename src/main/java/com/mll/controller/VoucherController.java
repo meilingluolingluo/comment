@@ -11,12 +11,25 @@ import org.springframework.web.bind.annotation.*;
 public class VoucherController {
     @Resource
     private IVoucherService voucherService;
-    @GetMapping("/id")
-    public Result queryVoucherOfShop(Long shopId) {
+    @PostMapping("/seckill")
+    public Result addSeckillVoucher(Voucher voucher) {
+        voucherService.addSeckillVoucher(voucher);
+        System.out.println("voucher = "+voucher.getId());
+        return Result.ok(voucher.getId());
+    }
+    /**
+     * 查询店铺的优惠券列表
+     * @param shopId 店铺id
+     * @return 优惠券列表
+     */
+    @GetMapping("/list/{shopId}")
+    public Result queryVoucherOfShop(@PathVariable("shopId") Long shopId) {
         return voucherService.queryVoucherOfShop(shopId);
     }
-    @PostMapping("/add")
-    public Result addSeckillVoucher(Voucher voucher) {
-        return voucherService.addSeckillVoucher(voucher);
+
+    @PostMapping
+    public Result addVoucher(@RequestBody Voucher voucher) {
+        voucherService.save(voucher);
+        return Result.ok(voucher.getId());
     }
 }

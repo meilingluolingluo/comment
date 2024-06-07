@@ -1,7 +1,9 @@
 package com.mll.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mll.dto.Result;
+import com.mll.entity.SeckillVoucher;
 import com.mll.entity.Voucher;
 import com.mll.mapper.VoucherMapper;
 import com.mll.service.ISeckillVoucherService;
@@ -13,6 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+
+import static com.mll.utils.RedisConstants.SECKILL_STOCK_KEY;
+
 @Slf4j
 @Service
 public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, Voucher> implements IVoucherService {
@@ -22,10 +27,18 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, Voucher> impl
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+    @Resource
+    private VoucherMapper voucherMapper;
 
     @Override
     public Result queryVoucherOfShop(Long shopId) {
-        List<Voucher> vouchers = baseMapper.selectByShopId(shopId); // Assuming there's a custom query in VoucherMapper
+
+//        QueryWrapper<Voucher> queryWrapper = new QueryWrapper<>();
+//        queryWrapper.eq("shop_id", shopId);
+//        // 假设数据库中存储shopId的列名是shop_id
+//        List<Voucher> vouchers = voucherMapper.selectList(queryWrapper);
+
+        List<Voucher> vouchers = getBaseMapper().queryVoucherOfShop(shopId);
         if (vouchers == null || vouchers.isEmpty()) {
             return Result.fail("No vouchers found for the shop.");
         }
@@ -39,16 +52,14 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, Voucher> impl
         if (voucher == null) {
             return Result.fail("Invalid voucher.");
         }
-
-        // Save the voucher in the database
         save(voucher);
-
-        // Add seckill voucher logic
-        seckillVoucherService.addSeckillVoucher(voucher);
-
-        // Optionally, you can cache the voucher information using Redis
-        stringRedisTemplate.opsForValue().set("voucher:" + voucher.getId(), voucher.toString());
-
+        SeckillVoucher seckillVoucher = new SeckillVoucher();
+        seckillVoucher.setVoucherId(voucher.getId());
+        seckillVoucher.setStock(voucher.getStock());
+        seckillVoucher.setBeginTime(voucher.getBeginTime());
+        seckillVoucher.setEndTime(voucher.getEndTime());
+        seckillVoucherService.save(seckillVoucher);
+        stringRedisTemplate.opsForValue().set(SECKILL_STOCK_KEY + voucher.getId(), voucher.getStock().toString());
         return Result.ok();
     }
 }

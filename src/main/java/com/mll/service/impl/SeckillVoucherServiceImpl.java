@@ -9,8 +9,4 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class SeckillVoucherServiceImpl extends ServiceImpl<SeckillVoucherMapper,SeckillVoucher> implements ISeckillVoucherService {
-    @Override
-    public void addSeckillVoucher(Voucher voucher) {
-        return;
-    }
 }

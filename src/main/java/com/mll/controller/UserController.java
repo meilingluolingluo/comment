@@ -2,7 +2,6 @@ package com.mll.controller;
 
 
 import com.mll.dto.UserDTO;
-import com.mll.entity.User;
 import com.mll.entity.UserInfo;
 import com.mll.dto.Result;
 import com.mll.service.IUserInfoService;

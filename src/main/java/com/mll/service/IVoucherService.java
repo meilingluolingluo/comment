@@ -7,6 +7,4 @@ import com.mll.entity.Voucher;
 public interface IVoucherService extends IService<Voucher> {
     Result queryVoucherOfShop(Long shopId);
     Result addSeckillVoucher(Voucher voucher);
-
-
 }

@@ -7,5 +7,4 @@ import com.mll.entity.Voucher;
 
 public interface ISeckillVoucherService extends IService<SeckillVoucher> {
 
-    void addSeckillVoucher(Voucher voucher);
 }

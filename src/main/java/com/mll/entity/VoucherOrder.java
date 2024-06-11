@@ -8,6 +8,7 @@ import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
 
 import java.io.Serializable;
+import java.math.BigInteger;
 import java.time.LocalDateTime;
 
 @Data
@@ -22,7 +23,7 @@ public class VoucherOrder implements Serializable {
      * 主键
      */
     @TableId(value = "id", type = IdType.INPUT)
-    private Long id;
+    private BigInteger id;
 
     /**
      * 下单的用户id

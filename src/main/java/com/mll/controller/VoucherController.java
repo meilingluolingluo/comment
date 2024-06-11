@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/voucher")
-public class VoucherController {
+public class                                 VoucherController {
     @Resource
     private IVoucherService voucherService;
     @PostMapping("/seckill")

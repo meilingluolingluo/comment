@@ -6,5 +6,5 @@ import com.mll.entity.VoucherOrder;
 public interface IVoucherOrderService {
     Result seckillVoucher(Long voucherId);
 
-    void createVoucherOrder(VoucherOrder voucherOrder);
+    Result createVoucherOrder(Long voucherId);
 }

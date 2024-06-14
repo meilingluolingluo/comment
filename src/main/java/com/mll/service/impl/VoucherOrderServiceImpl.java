@@ -8,8 +8,12 @@ import com.mll.mapper.VoucherOrderMapper;
 import com.mll.service.ISeckillVoucherService;
 import com.mll.service.IVoucherOrderService;
 import com.mll.utils.RedisIdGeneratorService;
+import com.mll.utils.RedisLockImpl;
 import com.mll.utils.UserHolder;
 import jakarta.annotation.Resource;
+import org.springframework.aop.framework.AopContext;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,57 +26,77 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private ISeckillVoucherService seckillVoucherService;
     @Resource
     private RedisIdGeneratorService redisIdGeneratorService;
-
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
     @Override
     @Transactional
     public Result seckillVoucher(Long voucherId) {
-        //1. 查询
+        // 1. 查询秒杀券信息
         SeckillVoucher seckillVoucher = seckillVoucherService.getById(voucherId);
+        LocalDateTime now = LocalDateTime.now();
 
-        //2. 是否开始
-        if (seckillVoucher.getBeginTime().isAfter(LocalDateTime.now())){
-            return Result.fail("秒杀尚未开始");
+        // 2. 校验秒杀时间
+        if (seckillVoucher == null || seckillVoucher.getBeginTime().isAfter(now) || seckillVoucher.getEndTime().isBefore(now)) {
+            return Result.fail(seckillVoucher == null ? "无效的秒杀券" : "秒杀尚未开始或已结束");
         }
 
-        //3. 是否结束
-
-        if (seckillVoucher.getEndTime().isBefore(LocalDateTime.now())){
-            return Result.fail("秒杀已经结束");
-        }
-
-        //4. 判断库存是否充足
-        if (seckillVoucher.getStock() < 1){
+        // 3. 校验库存
+        if (seckillVoucher.getStock() < 1) {
             return Result.fail("库存不足");
         }
-
-        //5. 扣减库存
-        boolean success = seckillVoucherService.update()
-                .setSql("stock = stock - 1")
-                .eq("voucher_id", voucherId)
-                .eq("stock", seckillVoucher.getStock())
-                .update();
-        if(!success){
-            return Result.fail("库存不足");
-        }
-
-        //6. 创建订单
-        VoucherOrder voucherOrder = new VoucherOrder();
-        String id = redisIdGeneratorService.generateUniqueId("order");
-        BigInteger Id = new BigInteger(id);
-        voucherOrder.setId(Id);
         Long userId = UserHolder.getUser().getId();
-        voucherOrder.setUserId(userId);
-        voucherOrder.setVoucherId(voucherId);
-        save(voucherOrder);
+        RedisLockImpl lock = new RedisLockImpl( stringRedisTemplate,"order:"+ userId);
+        boolean isLock = lock.tryLock(1200L);
+        if((!isLock)){
+            return Result.fail("获取锁失败");
+        }
 
-        //7. 返回订单id
-        return Result.ok(voucherOrder.getId());
+        try {
+            IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
+            return proxy.createVoucherOrder(voucherId);
+        } finally {
+            lock.unlock();
+        }
 
     }
 
     @Override
-    public void createVoucherOrder(VoucherOrder voucherOrder) {
+    @Transactional
+    public Result createVoucherOrder(Long voucherId) {
+        Long userId = UserHolder.getUser().getId();
 
+        // 1. 实现一人一单
+        if (isVoucherAlreadyOrdered(userId, voucherId)) {
+            //System.out.println("一人一单");
+            return Result.fail("购买已达到上限");
+        }
+
+        // 2. 扣减库存并校验库存
+        if (!deductStock(voucherId)) {
+            return Result.fail("库存不足");
+        }
+
+        // 3. 创建订单
+        VoucherOrder voucherOrder = new VoucherOrder();
+        voucherOrder.setId(new BigInteger(redisIdGeneratorService.generateUniqueId("order")));
+        voucherOrder.setUserId(userId);
+        voucherOrder.setVoucherId(voucherId);
+        save(voucherOrder);
+
+        // 4. 返回订单id
+        return Result.ok(voucherOrder.getId());
+    }
+
+    private boolean isVoucherAlreadyOrdered(Long userId, Long voucherId) {
+        return query().eq("user_id", userId).eq("voucher_id", voucherId).count() > 0;
+    }
+
+    private boolean deductStock(Long voucherId) {
+        return seckillVoucherService.update()
+                .setSql("stock = stock - 1")
+                .eq("voucher_id", voucherId)
+                .gt("stock", 0)
+                .update();
     }
 }

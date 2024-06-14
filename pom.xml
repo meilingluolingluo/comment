@@ -105,6 +105,10 @@
             <artifactId>guava</artifactId>
             <version>32.0.1-jre</version>
         </dependency>
+        <dependency>
+            <groupId>org.aspectj</groupId>
+            <artifactId>aspectjweaver</artifactId>
+        </dependency>
 
     </dependencies>
 

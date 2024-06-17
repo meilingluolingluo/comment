@@ -8,9 +8,10 @@ import com.mll.mapper.VoucherOrderMapper;
 import com.mll.service.ISeckillVoucherService;
 import com.mll.service.IVoucherOrderService;
 import com.mll.utils.RedisIdGeneratorService;
-import com.mll.utils.RedisLockImpl;
 import com.mll.utils.UserHolder;
 import jakarta.annotation.Resource;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private RedisIdGeneratorService redisIdGeneratorService;
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+    @Resource
+    private RedissonClient redissonClient;
 
     @Override
     @Transactional
@@ -45,8 +48,11 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             return Result.fail("库存不足");
         }
         Long userId = UserHolder.getUser().getId();
-        RedisLockImpl lock = new RedisLockImpl(stringRedisTemplate,"order:"+ userId);
-        boolean isLock = lock.tryLock(1200L);
+        //方法一：自定义分布式锁
+        //RedisLockImpl lock = new RedisLockImpl(stringRedisTemplate,"order:"+ userId);
+        //方法二：使用Redisson实现分布式锁
+        RLock lock = redissonClient.getLock("order:"+ userId);
+        boolean isLock = lock.tryLock();
         if((!isLock)){
             return Result.fail("获取锁失败");
         }

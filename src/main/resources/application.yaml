@@ -23,6 +23,13 @@ spring:
           min-idle: 1
           time-between-eviction-runs: 10s
 
+redisson:
+  config: |
+    singleServerConfig:
+      address: "redis://localhost:6379"
+      password: null
+      connectionPoolSize: 64
+      connectionMinimumIdleSize: 24
 mybatis-plus:
   type-aliases-package: com.mll.entity
 

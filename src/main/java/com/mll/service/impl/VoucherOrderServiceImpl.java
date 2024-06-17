@@ -12,7 +12,6 @@ import com.mll.utils.RedisLockImpl;
 import com.mll.utils.UserHolder;
 import jakarta.annotation.Resource;
 import org.springframework.aop.framework.AopContext;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +25,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private ISeckillVoucherService seckillVoucherService;
     @Resource
     private RedisIdGeneratorService redisIdGeneratorService;
-    @Autowired
+    @Resource
     private StringRedisTemplate stringRedisTemplate;
 
     @Override
@@ -46,7 +45,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             return Result.fail("库存不足");
         }
         Long userId = UserHolder.getUser().getId();
-        RedisLockImpl lock = new RedisLockImpl( stringRedisTemplate,"order:"+ userId);
+        RedisLockImpl lock = new RedisLockImpl(stringRedisTemplate,"order:"+ userId);
         boolean isLock = lock.tryLock(1200L);
         if((!isLock)){
             return Result.fail("获取锁失败");

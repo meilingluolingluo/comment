@@ -3,7 +3,7 @@ package com.mll.utils;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
-import org.redisson.api.RedissonClient;
+
 import java.util.Collections;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;

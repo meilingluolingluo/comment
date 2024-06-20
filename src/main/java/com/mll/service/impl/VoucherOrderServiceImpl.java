@@ -24,10 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
 
 @Slf4j
 @Service
@@ -46,7 +44,10 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private DefaultRedisScript<Long> seckillScript;
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private static final String SECKILL_SCRIPT_PATH = "lua/seckill.lua";
-    private final String queueName = "stream.orders";
+    private static final String QUEUE_NAME = "stream.orders";
+    private static final String GROUP_NAME = "g1";
+    private static final String CONSUMER_NAME = "c1";
+
     @PostConstruct
     public void init() {
         // 加载秒杀Lua脚本
@@ -57,76 +58,58 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         executorService.submit(new VoucherOrderHandler());
     }
 
-    private class VoucherOrderHandler implements  Runnable {
-
+    private class VoucherOrderHandler implements Runnable {
         @Override
         public void run() {
-            while (true){
+            while (true) {
                 try {
                     initStream();
                     // 获取消息队列的订单信息
-                    List<MapRecord<String, Object, Object>> list = stringRedisTemplate.opsForStream().read(
-                            Consumer.from("g1", "c1"),
-                            StreamReadOptions.empty().count(1).block(Duration.ofSeconds(2)),
-                            StreamOffset.create(queueName, ReadOffset.lastConsumed())
-                    );
+                    List<MapRecord<String, Object, Object>> list = getVoucherOrderFromStream(ReadOffset.lastConsumed());
+                    if (list == null || list.isEmpty()) continue;
 
-                    //判断消息获取是否成功
-                    if (list == null || list.isEmpty()) {
-                        //如果获取失败，说明队列为空，继续下一次循环
-                        continue;
-                    }
                     MapRecord<String, Object, Object> record = list.getFirst();
-                    Map<Object, Object> values = record.getValue();
-                    VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(values,new VoucherOrder(), true);
+                    VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(record.getValue(), new VoucherOrder(), true);
                     handleVoucherOrder(voucherOrder);
-                    stringRedisTemplate.opsForStream().acknowledge(queueName, "g1", record.getId());
-
-                }  catch (Exception e) {
+                    acknowledgeOrder(record);
+                } catch (Exception e) {
                     log.error("处理订单异常", e);
                     handlePendingList();
                 }
             }
         }
-        public void initStream(){
-            Boolean exists = stringRedisTemplate.hasKey(queueName);
+
+        private void initStream() {
+            Boolean exists = stringRedisTemplate.hasKey(QUEUE_NAME);
             if (BooleanUtil.isFalse(exists)) {
                 log.info("stream不存在，开始创建stream");
-                // 不存在，需要创建
-                stringRedisTemplate.opsForStream().createGroup(queueName, ReadOffset.latest(), "g1");
+                stringRedisTemplate.opsForStream().createGroup(QUEUE_NAME, ReadOffset.latest(), GROUP_NAME);
                 log.info("stream和group创建完毕");
-                return;
-            }
-            // stream存在，判断group是否存在
-            StreamInfo.XInfoGroups groups = stringRedisTemplate.opsForStream().groups(queueName);
-            if(groups.isEmpty()){
-                log.info("group不存在，开始创建group");
-                // group不存在，创建group
-                stringRedisTemplate.opsForStream().createGroup(queueName, ReadOffset.latest(), "g1");
-                log.info("group创建完毕");
+            } else {
+                StreamInfo.XInfoGroups groups = stringRedisTemplate.opsForStream().groups(QUEUE_NAME);
+                if (groups.isEmpty()) {
+                    log.info("group不存在，开始创建group");
+                    stringRedisTemplate.opsForStream().createGroup(QUEUE_NAME, ReadOffset.latest(), GROUP_NAME);
+                    log.info("group创建完毕");
+                }
             }
         }
+
+        private void acknowledgeOrder(MapRecord<String, Object, Object> record) {
+            stringRedisTemplate.opsForStream().acknowledge(QUEUE_NAME, GROUP_NAME, record.getId());
+        }
     }
+
     private void handlePendingList() {
         while (true) {
             try {
-                // 获取消息队列的订单信息
-                List<MapRecord<String, Object, Object>> list = stringRedisTemplate.opsForStream().read(
-                        Consumer.from("g1", "c1"),
-                        StreamReadOptions.empty().count(1).block(Duration.ofSeconds(2)),
-                        StreamOffset.create(queueName, ReadOffset.lastConsumed())
-                );
-
-                if (list == null || list.isEmpty()) {
-                    continue;
-                }
+                List<MapRecord<String, Object, Object>> list = getVoucherOrderFromStream(ReadOffset.from("0"));
+                if (list == null || list.isEmpty()) break;
 
                 MapRecord<String, Object, Object> record = list.getFirst();
-                Map<Object, Object> values = record.getValue();
-                VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(values,new VoucherOrder(), true);
+                VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(record.getValue(), new VoucherOrder(), true);
                 handleVoucherOrder(voucherOrder);
-                stringRedisTemplate.opsForStream().acknowledge(queueName, "g1", record.getId());
-
+                acknowledgeOrder(record);
             } catch (Exception e) {
                 log.error("处理挂起订单异常", e);
                 try {
@@ -152,7 +135,6 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     public Result seckillVoucher(Long voucherId) {
         Long userId = UserHolder.getUser().getId();
         String orderId = redisIdGeneratorService.generateUniqueId("order");
-
         Long result = stringRedisTemplate.execute(
                 seckillScript,
                 Collections.singletonList("seckill:stock:" + voucherId),
@@ -162,6 +144,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         if (result == null || result != 0) {
             return Result.fail(result == null ? "系统错误" : (result == 1 ? "库存不足" : "不能重复下单"));
         }
+
         proxy = (IVoucherOrderService) AopContext.currentProxy();
         return Result.ok(orderId);
     }
@@ -174,10 +157,12 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             log.error("一人一单");
             return;
         }
+
         if (!deductStock(voucherOrder.getVoucherId())) {
             log.error("库存不足");
             return;
         }
+
         save(voucherOrder);
     }
 
@@ -191,5 +176,15 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
                 .eq("voucher_id", voucherId)
                 .gt("stock", 0)
                 .update();
+    }
+    private List<MapRecord<String, Object, Object>> getVoucherOrderFromStream(ReadOffset readOffset) {
+        return stringRedisTemplate.opsForStream().read(
+                Consumer.from(GROUP_NAME, CONSUMER_NAME),
+                StreamReadOptions.empty().count(1).block(Duration.ofSeconds(2)),
+                StreamOffset.create(QUEUE_NAME, readOffset)
+        );
+    }
+    private void acknowledgeOrder(MapRecord<String, Object, Object> record) {
+        stringRedisTemplate.opsForStream().acknowledge(QUEUE_NAME, GROUP_NAME, record.getId());
     }
 }

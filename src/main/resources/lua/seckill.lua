@@ -7,8 +7,19 @@ local orderId = ARGV[3]    -- 订单的ID
 local stockKey = 'seckill:stock:' .. voucherId  -- 库存键
 local orderKey = 'seckill:order:' .. voucherId  -- 已下单用户集合键
 
+-- 获取库存值
+local stock = redis.call('get', stockKey)
+
+-- 检查库存是否为空
+if (stock == false or stock == nil) then
+    return 1  -- 库存不足，返回1
+end
+
+-- 转换库存为数字类型
+stock = tonumber(stock)
+
 -- 检查库存
-if (tonumber(redis.call('get', stockKey)) <= 0) then
+if (stock <= 0) then
     return 1  -- 库存不足，返回1
 end
 
@@ -22,6 +33,6 @@ redis.call('incrby', stockKey, -1)
 
 -- 将用户添加到已下单集合中
 redis.call('sadd', orderKey, userId)
-
--- 返回0表示秒杀成功
+-- 3.6.发送消息到队列中， XADD stream.orders * k1 v1 k2 v2 ...
+redis.call('xadd', 'stream.orders', '*', 'userId', userId, 'voucherId', voucherId, 'id', orderId)
 return 0

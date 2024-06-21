@@ -59,17 +59,26 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
 
     @Override
     public Result queryBlogLikes(Long id) {
-        return null;
+        Blog blog = getById(id);
+        if (blog == null) {
+            return Result.fail("笔记不存在！");
+        }
+        return Result.ok(stringRedisTemplate.opsForZSet().range(BLOG_LIKED_KEY + id, 0, -1));
     }
 
     @Override
     public Result queryBlogOfFollow(Long max, Integer offset) {
-        return null;
+        Long userId = UserHolder.getUser().getId();
+        return Result.ok();
     }
 
     @Override
     public Result saveBlog(Blog blog) {
-        return null;
+        UserDTO user = UserHolder.getUser();
+        blog.setUserId(user.getId());
+        if(save(blog))
+            return Result.ok(blog.getId());
+        return Result.fail("笔记发布失败！");
     }
 
     @Override

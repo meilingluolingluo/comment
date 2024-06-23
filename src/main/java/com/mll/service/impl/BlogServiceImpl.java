@@ -83,29 +83,28 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
 
     @Override
     public Result likeBlog(Long id) {
-        // 1.获取登录用户
-        Long userId = UserHolder.getUser().getId();
-        // 2.判断当前登录用户是否已经点赞
+        UserDTO user = UserHolder.getUser();
         String key = BLOG_LIKED_KEY + id;
-        Double score = stringRedisTemplate.opsForZSet().score(key, userId.toString());
-        if (score == null) {
-            // 3.如果未点赞，可以点赞
-            // 3.1.数据库点赞数 + 1
-            boolean isSuccess = update().setSql("liked = liked + 1").eq("id", id).update();
-            // 3.2.保存用户到Redis的set集合  zadd key value score
+        String memberId = user.getId().toString();
+
+        Boolean isLiked = stringRedisTemplate.opsForSet().isMember(key, memberId);
+
+        boolean isSuccess;
+        if (Boolean.TRUE.equals(isLiked)) {
+            // 如果已点赞，取消点赞
+            isSuccess = update().setSql("liked = liked - 1").eq("id", id).update();
             if (isSuccess) {
-                stringRedisTemplate.opsForZSet().add(key, userId.toString(), System.currentTimeMillis());
+                stringRedisTemplate.opsForZSet().remove(key, memberId);
             }
         } else {
-            // 4.如果已点赞，取消点赞
-            // 4.1.数据库点赞数 -1
-            boolean isSuccess = update().setSql("liked = liked - 1").eq("id", id).update();
-            // 4.2.把用户从Redis的set集合移除
+            // 如果未点赞，可以点赞
+            isSuccess = update().setSql("liked = liked + 1").eq("id", id).update();
             if (isSuccess) {
-                stringRedisTemplate.opsForZSet().remove(key, userId.toString());
+                stringRedisTemplate.opsForZSet().add(key, memberId, System.currentTimeMillis());
             }
         }
-        return Result.ok();
+
+        return isSuccess ? Result.ok() : Result.fail("操作失败");
     }
     private void isBlogLiked(Blog blog) {
         // 1.获取登录用户

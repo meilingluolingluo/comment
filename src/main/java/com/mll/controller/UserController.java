@@ -35,14 +35,18 @@ public class UserController {
     }
 
     @PostMapping("/logout")
-    public Result logout(HttpSession session){
-        userService.logout(session.toString());
-        return Result.ok("登出成功");
+    public Result logout(@RequestHeader("Authorization") String token){
+
+        return userService.logout(token);
     }
 
     @GetMapping("/me")
     public Result me(){
         UserDTO user = UserHolder.getUser();
+        if (user == null) {
+            return Result.fail("用户未登录");
+        }
+        //System.out.println("me:"+user);
         return Result.ok(user);
     }
 

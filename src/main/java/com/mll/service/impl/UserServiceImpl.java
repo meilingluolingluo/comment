@@ -59,39 +59,54 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Override
     public Result login(LoginFormDTO loginForm, HttpSession session) {
-        //1. 校验手机号
+        // 1. 校验手机号
         String phone = loginForm.getPhone();
         if (RegexUtils.isPhoneInvalid(phone)) {
             return Result.fail("手机号格式错误");
         }
-        //2. 校验验证码
-        String cacheCode = stringRedisTemplate.opsForValue().get(LOGIN_CODE_KEY+phone);
+
+        // 2. 校验验证码
+        String cacheCode = stringRedisTemplate.opsForValue().get(LOGIN_CODE_KEY + phone);
         String code = loginForm.getCode();
         if (cacheCode == null || !cacheCode.equals(code)) {
-            //3. 若不一致则报错
+            // 3. 若不一致则报错
             return Result.fail("验证码错误");
         }
-        //4. 根据手机号查询用户
+
+        // 4. 根据手机号查询用户
         User user = query().eq("phone", phone).one();
         if (user == null) {
-            //若不存在则创建新用户再保存
+            // 若不存在则创建新用户再保存
             user = createUserWithPhone(phone);
             save(user); // 保存新用户
         }
-        // 将用户信息转换为UserDTO并保存到Redis
+
+        // 5. 检查是否已存在用户的 token
+        String tokenKey = LOGIN_USER_KEY + phone; // 使用手机号作为键的一部分
+        String existingToken = stringRedisTemplate.opsForValue().get(tokenKey);
+        if (existingToken != null) {
+            // Token 已存在，返回现有的 token
+            return Result.ok(existingToken);
+        }
+
+        // 6. 将用户信息转换为 UserDTO 并保存到 Redis
         String token = UUID.randomUUID().toString();
         UserDTO userDTO = modelMapper.map(user, UserDTO.class);
-        // 将用户信息转换为Map<String, Object>
         Map<String, Object> userMap = BeanUtil.beanToMap(userDTO, false, true);
-        // 将Map<String, Object>转换为Map<String, String>
         Map<String, String> stringUserMap = userMap.entrySet().stream()
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
                         e -> e.getValue() != null ? e.getValue().toString() : null
                 ));
-        // 将用户信息保存到Redis
+
+        // 7. 将用户信息保存到 Redis
         stringRedisTemplate.opsForHash().putAll(LOGIN_USER_KEY + token, stringUserMap);
         stringRedisTemplate.expire(LOGIN_USER_KEY + token, LOGIN_USER_TTL, TimeUnit.MINUTES);
+
+        // 8. 保存 token 到 Redis 以便后续查找
+        stringRedisTemplate.opsForValue().set(tokenKey, token, LOGIN_USER_TTL, TimeUnit.MINUTES);
+
+        //System.out.println("logintoken = " + token);
         return Result.ok(token);
     }
     @Override
@@ -137,15 +152,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         }
         // 6.循环遍历
         int count = 0;
-        while (true) {
+        // 如果为0，说明未签到，结束
+        // 如果不为0，说明已签到，计数器+1
+        while ((num & 1) != 0) {
             // 6.1.让这个数字与1做与运算，得到数字的最后一个bit位  // 判断这个bit位是否为0
-            if ((num & 1) == 0) {
-                // 如果为0，说明未签到，结束
-                break;
-            }else {
-                // 如果不为0，说明已签到，计数器+1
-                count++;
-            }
+            count++;
             // 把数字右移一位，抛弃最后一个bit位，继续下一个bit位
             num >>>= 1;
         }
@@ -154,24 +165,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Override
     public Result logout(String token) {
-        // 1. 获取请求头中的token
-        UserDTO user = UserHolder.getUser();
-        if(user == null) {
-            return Result.fail("用户未登录");
-        }
+        // 1. 删除Redis中存储的用户信息
+        Boolean delete = stringRedisTemplate.delete(token);
 
-        // 2. 删除Redis中存储的用户信息
-        String tokenKey = LOGIN_USER_KEY + token;
-        Boolean delete = stringRedisTemplate.delete(tokenKey);
-
-        // 3. 清除ThreadLocal中的用户信息
+        // 2. 清除ThreadLocal中的用户信息
         UserHolder.removeUser();
 
-        // 4. 返回结果
+        // 3. 返回结果
         if (Boolean.TRUE.equals(delete)) {
             return Result.ok("登出成功");
         } else {
-            return Result.fail("登出失败，请重试");
+            return Result.ok("用户已登出或session已过期");
         }
     }
 

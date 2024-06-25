@@ -11,7 +11,6 @@ import com.mll.utils.UserHolder;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
-import org.aspectj.weaver.patterns.IToken;
 import org.springframework.web.bind.annotation.*;
 @Slf4j
 @RestController
@@ -46,7 +45,6 @@ public class UserController {
         if (user == null) {
             return Result.fail("用户未登录");
         }
-        //System.out.println("me:"+user);
         return Result.ok(user);
     }
 

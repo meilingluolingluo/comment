@@ -112,9 +112,6 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
                 newOffset = 1;
             }
         }
-        //String idStr = StrUtil.join(",", blogIds);
-        // 根据博客ID查询博客详细信息
-        //List<Blog> blogs = query().in("id", blogIds).last("ORDER BY FIELD(id," + idStr +")").list();
         List<Blog> blogs = query().in("id", blogIds).list();
         // 按照ID顺序排序
         blogs.sort((b1, b2) -> {

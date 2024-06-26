@@ -2,15 +2,14 @@ package com.mll.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.extension.conditions.query.QueryChainWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mll.dto.Result;
 import com.mll.dto.UserDTO;
 import com.mll.entity.Follow;
-import com.mll.entity.User;
 import com.mll.mapper.FollowMapper;
 import com.mll.service.IFollowService;
 import com.mll.service.IUserService;
+import com.mll.utils.UserHolder;
 import jakarta.annotation.Resource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -35,26 +34,55 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
 
     @Override
     public Result follow(Long followUserId, Boolean isFollow) {
-        Long userId = getUser().getId();
-       if (isFollow){
-           Follow follow = new Follow();
-           follow.setUserId(userId);
-           follow.setFollowUserId(followUserId);
-           boolean successSave = save(follow);
-           if(successSave){
-               stringRedisTemplate.opsForSet().add(USER_FOLLOW_KEY  + userId,followUserId.toString());
-               return Result.ok();
-           }
-           return Result.fail("关注失败");
-           //return save(follow) ? Result.ok() : Result.fail("关注失败");
-       }else {
-           boolean removed = remove(new QueryWrapper<Follow>()
-                   .eq("user_id",userId)
-                   .eq("follow_user_id",followUserId));
-           stringRedisTemplate.opsForSet().remove(USER_FOLLOW_KEY  + userId,followUserId.toString());
-           return removed ? Result.ok() : Result.fail("取消关注失败");
-       }
+        Long userId = UserHolder.getUser().getId();
+
+        // 关注操作
+        if (isFollow) {
+            Follow follow = new Follow();
+            follow.setUserId(userId);
+            follow.setFollowUserId(followUserId);
+
+            // 保存关注关系到数据库
+            boolean successSave = save(follow);
+
+            if (successSave) {
+                try {
+                    // 添加关注用户到Redis的ZSet
+                    stringRedisTemplate.opsForSet().add(USER_FOLLOW_KEY + userId, followUserId.toString());
+                    return Result.ok();
+                } catch (Exception e) {
+                    log.error("Redis添加关注用户失败", e);
+                    // 如果Redis操作失败，回滚数据库操作
+                    remove(new QueryWrapper<Follow>()
+                            .eq("user_id", userId)
+                            .eq("follow_user_id", followUserId));
+                    return Result.fail("关注失败");
+                }
+            } else {
+                return Result.fail("关注失败");
+            }
+        } else {
+            // 取消关注操作
+            boolean removed = remove(new QueryWrapper<Follow>()
+                    .eq("user_id", userId)
+                    .eq("follow_user_id", followUserId));
+
+            if (removed) {
+                try {
+                    // 从Redis的ZSet中移除关注用户
+                    stringRedisTemplate.opsForSet().remove(USER_FOLLOW_KEY + userId, followUserId.toString());
+                    return Result.ok();
+                } catch (Exception e) {
+                    log.error("Redis移除关注用户失败", e);
+                    // 如果Redis操作失败，可以选择记录错误日志，但数据库操作已成功，无需回滚
+                    return Result.fail("取消关注失败");
+                }
+            } else {
+                return Result.fail("取消关注失败");
+            }
+        }
     }
+
 
     @Override
     public Result isFollow(Long followUserId) {

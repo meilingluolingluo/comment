@@ -30,15 +30,21 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
         // 1. 获取请求头的token
         String token = request.getHeader("Authorization");
         if (StrUtil.isBlank(token)) {
+            System.out.println("Token is blank");
             return true;
         }
+
+        System.out.println("Token: " + token);
 
         String key = LOGIN_USER_KEY + token;
         // 2. 获取用户信息
         Map<Object, Object> userMap = stringRedisTemplate.opsForHash().entries(key);
         if (userMap.isEmpty()) {
+            System.out.println("User not found in Redis for token: " + token);
             return true;
         }
+
+        System.out.println("User found in Redis for token: " + token);
 
         // 3. 将 Map<Object, Object> 转换为 Map<String, String>
         Map<String, String> stringUserMap = userMap.entrySet().stream()
@@ -47,20 +53,25 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
                         e -> e.getValue().toString()
                 ));
 
+        System.out.println("User map: " + stringUserMap);
+
         // 4. 将 map 转换为 UserDTO 对象
         UserDTO user = BeanUtil.fillBeanWithMap(stringUserMap, new UserDTO(), false);
+        System.out.println("UserDTO: " + user);
 
         // 5. 保存用户信息
         UserHolder.saveUser(user);
 
         // 6. 刷新token过期时间
         stringRedisTemplate.expire(key, LOGIN_USER_TTL, TimeUnit.MINUTES);
+        System.out.println("Refreshed token expiry for token: " + token);
 
         return true;
     }
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+        System.out.println("Removing user from UserHolder");
         UserHolder.removeUser();
     }
 }

@@ -9,6 +9,7 @@ import com.mll.service.IUserService;
 import com.mll.dto.LoginFormDTO;
 import com.mll.utils.UserHolder;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -34,7 +35,9 @@ public class UserController {
     }
 
     @PostMapping("/logout")
-    public Result logout(@RequestHeader("Authorization") String token){
+    public Result logout(HttpServletRequest request) {
+        // 获取请求头中的token
+        String token = request.getHeader("Authorization");
 
         return userService.logout(token);
     }

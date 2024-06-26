@@ -14,22 +14,17 @@ spring:
 
   data:
     redis:
-      port: 6379
       host: localhost
+      port: 6379
       lettuce:
         pool:
-          max-active: 10
-          max-idle: 10
-          min-idle: 1
+          max-active: 50
+          max-idle: 20
+          min-idle: 10
           time-between-eviction-runs: 10s
+          max-wait: -1 # 连接最大等待时间，-1 表示无限等待
+        shutdown-timeout: 100ms # 关闭连接池时的超时时间
 
-redisson:
-  config: |
-    singleServerConfig:
-      address: "redis://localhost:6379"
-      password: null
-      connectionPoolSize: 64
-      connectionMinimumIdleSize: 24
 mybatis-plus:
   type-aliases-package: com.mll.entity
 

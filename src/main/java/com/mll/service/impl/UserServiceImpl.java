@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.StrUtil;
 import com.mll.utils.UserHolder;
 import jakarta.annotation.Resource;
 import org.modelmapper.ModelMapper;
@@ -81,13 +82,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             save(user); // 保存新用户
         }
 
-        // 5. 检查是否已存在用户的 token
-        String tokenKey = LOGIN_USER_KEY + phone; // 使用手机号作为键的一部分
-        String existingToken = stringRedisTemplate.opsForValue().get(tokenKey);
-        if (existingToken != null) {
-            // Token 已存在，返回现有的 token
-            return Result.ok(existingToken);
-        }
 
         // 6. 将用户信息转换为 UserDTO 并保存到 Redis
         String token = UUID.randomUUID().toString();
@@ -102,11 +96,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         // 7. 将用户信息保存到 Redis
         stringRedisTemplate.opsForHash().putAll(LOGIN_USER_KEY + token, stringUserMap);
         stringRedisTemplate.expire(LOGIN_USER_KEY + token, LOGIN_USER_TTL, TimeUnit.MINUTES);
-
-        // 8. 保存 token 到 Redis 以便后续查找
-        stringRedisTemplate.opsForValue().set(tokenKey, token, LOGIN_USER_TTL, TimeUnit.MINUTES);
-
-        //System.out.println("logintoken = " + token);
         return Result.ok(token);
     }
     @Override
@@ -165,19 +154,23 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Override
     public Result logout(String token) {
-        // 1. 删除Redis中存储的用户信息
-        Boolean delete = stringRedisTemplate.delete(token);
 
-        // 2. 清除ThreadLocal中的用户信息
-        UserHolder.removeUser();
-
-        // 3. 返回结果
-        if (Boolean.TRUE.equals(delete)) {
-            return Result.ok("登出成功");
-        } else {
-            return Result.ok("用户已登出或session已过期");
+        // 检查token是否存在
+        if (StrUtil.isBlank(token)) {
+            return Result.fail("未登录");
         }
+
+        // 拼接Redis中的键
+        String userTokenKey = LOGIN_USER_KEY + token;
+
+        // 删除Redis中的键
+        //stringRedisTemplate.delete(tokenKey);
+        stringRedisTemplate.delete(userTokenKey);
+
+        // 返回退出成功
+        return Result.ok("退出成功");
     }
+
 
     private User createUserWithPhone(String phone) {
         User user = new User();

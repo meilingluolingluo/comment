@@ -38,7 +38,7 @@ public class ShopController {
             @RequestParam(value = "x", required = false) Double x,
             @RequestParam(value = "y", required = false) Double y
     ) {
-        return shopService.queryShopByType(typeId, current, null, null);
+        return shopService.queryShopByType(typeId, current, x, y);
     }
     /**
      * 根据条件分页查询商铺信息

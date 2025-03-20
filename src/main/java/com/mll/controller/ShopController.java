@@ -1,8 +1,11 @@
 package com.mll.controller;
 
+import cn.hutool.core.util.StrUtil;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mll.dto.Result;
 import com.mll.entity.Shop;
 import com.mll.service.IShopService;
+import com.mll.utils.SystemConstants;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,8 +23,14 @@ public class ShopController {
      */
     @GetMapping("/{id}")
     public Result queryShopById(@PathVariable("id") Long id) {
-        return Result.ok(shopService.queryById(id));
+        return shopService.queryById(id);
     }
+    /**
+     * 根据类型分页查询商铺信息
+     * @param typeId 商铺类型
+     * @param current 页码
+     * @return 商铺详情数据
+     */
     @GetMapping("/of/type")
     public Result queryShopByType(
             @RequestParam("typeId") Integer typeId,
@@ -29,10 +38,31 @@ public class ShopController {
             @RequestParam(value = "x", required = false) Double x,
             @RequestParam(value = "y", required = false) Double y
     ) {
-        return shopService.queryShopByType(typeId, current, x, y);
+        return shopService.queryShopByType(typeId, current, null, null);
+    }
+    /**
+     * 根据条件分页查询商铺信息
+     * @param name 商铺名称
+     * @param current 页码
+     * @return 商铺详情数据
+     */
+    @GetMapping("/of/name")
+    public Result queryShopByName(
+            @RequestParam(value = "name", required = false) String name,
+            @RequestParam(value = "current", defaultValue = "1") Integer current
+    ) {
+        // 根据类型分页查询
+        Page<Shop> page = shopService.query()
+                .like(StrUtil.isNotBlank(name), "name", name)
+                .page(new Page<>(current, SystemConstants.MAX_PAGE_SIZE));
+        // 返回数据
+        return Result.ok(page.getRecords());
     }
 
-
+    /**
+     * 获取所有店铺id
+     * @return
+     */
     @GetMapping("/all")
     public Result queryShopAll(){
         return Result.ok(shopService.getAllShopIds());
